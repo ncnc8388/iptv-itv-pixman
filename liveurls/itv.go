@@ -1,10 +1,13 @@
 package liveurls
 
 import (
+	"bufio"
 	"context"
 	"io"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -22,8 +25,9 @@ var (
 		"cache.ott.fifalive.itv.cmvideo.cn":  "ctcc-livod.ctyun-cdn.gitv.tv",
 		"cache.ott.hnbblive.itv.cmvideo.cn":  "ctcc-livod.ctyun-cdn.gitv.tv",
 	}
-	programList = map[string]string{
-		"fifalive/6000000001000029752.m3u8":     "http://gslbserv.itv.cmvideo.cn:80/1.m3u8?channel-id=FifastbLive&Contentid=3000000010000017678&livemode=1&stbId=yu&mode=1",
+	ipTVHostMappings = loadIPTVHostMappings()
+	programList      = map[string]string{
+		"fifalive/6000000001000029752.m3u8":    "http://gslbserv.itv.cmvideo.cn:80/1.m3u8?channel-id=FifastbLive&Contentid=3000000010000017678&livemode=1&stbId=yu&mode=1",
 		"bestzb/5000000004000002226.m3u8":      "http://gslbserv.itv.cmvideo.cn:80/5000000004000002226/1.m3u8?channel-id=bestzb&Contentid=5000000004000002226&livemode=1&stbId=3",
 		"ystenlive/1000000005000265001.m3u8":   "http://gslbserv.itv.cmvideo.cn:80/1000000005000265001/1.m3u8?channel-id=ystenlive&Contentid=1000000005000265001&livemode=1&stbId=3",
 		"ystenlive/1000000001000023315.m3u8":   "http://gslbserv.itv.cmvideo.cn:80/1000000001000023315/1.m3u8?channel-id=ystenlive&Contentid=1000000001000023315&livemode=1&stbId=3",
@@ -238,7 +242,7 @@ func (i *Itv) HandleMainRequest(w http.ResponseWriter, r *http.Request, cdn stri
 	redirectPrefix := redirectURL[:strings.LastIndex(redirectURL, "/")+1]
 
 	// 替换TS文件的链接
-	golang := "https://lv.cgzf.ccwu.cc" + r.URL.Path
+	golang := "https://live.cgzf.ccwu.cc" + r.URL.Path
 	re := regexp.MustCompile(`((?i).*?\.ts)`)
 	data = re.ReplaceAllStringFunc(data, func(match string) string {
 		return golang + "?ts=" + redirectPrefix + match
@@ -249,7 +253,7 @@ func (i *Itv) HandleMainRequest(w http.ResponseWriter, r *http.Request, cdn stri
 
 	w.Header().Set("Content-Disposition", "attachment;filename="+id)
 	w.WriteHeader(http.StatusOK) // Set the status code to 200
-    w.Write([]byte(data)) // Write the response body
+	w.Write([]byte(data))        // Write the response body
 }
 
 func (i *Itv) HandleTsRequest(w http.ResponseWriter, ts string) {
@@ -263,7 +267,7 @@ func (i *Itv) HandleTsRequest(w http.ResponseWriter, ts string) {
 		return
 	}
 	w.WriteHeader(http.StatusOK) // Set the status code to 200
-    w.Write([]byte(content)) // Write the response body
+	w.Write([]byte(content))     // Write the response body
 }
 
 func getHTTPResponse(requestURL string) (string, string, error) {
@@ -271,26 +275,27 @@ func getHTTPResponse(requestURL string) (string, string, error) {
 		Timeout: 5 * time.Second,
 	}
 
-	// 自定义resolver
-	resolver := net.Resolver{
-		PreferGo: true,
-		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
-			for originalHost, mappedHost := range hostMappings {
-				if strings.Contains(address, originalHost) {
-					ip := resolveIP(mappedHost)
-					if ip != "" {
-						address = strings.Replace(address, originalHost, ip, 1)
-					}
-				}
+	// 自定义TCP拨号：URL和HTTP Host仍然使用原始域名，
+	// 只有实际建立TCP连接时才把域名替换成 iptvhost 中的IP。
+	transport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
+			host, port, err := net.SplitHostPort(address)
+			if err != nil {
+				return dialer.DialContext(ctx, network, address)
 			}
+
+			connectIP := lookupMappedIP(host)
+			if connectIP != "" {
+				address = net.JoinHostPort(connectIP, port)
+			}
+
 			return dialer.DialContext(ctx, network, address)
 		},
 	}
 
 	client := &http.Client{
-		Transport: &http.Transport{
-			DialContext: resolver.Dial,
-		},
+		Transport: transport,
 	}
 
 	resp, err := client.Get(requestURL)
@@ -310,6 +315,59 @@ func getHTTPResponse(requestURL string) (string, string, error) {
 	}
 
 	return body, redirectURL, nil
+}
+
+// loadIPTVHostMappings读取项目根目录下的iptvhost文件。
+// 文件格式：IP 空格 域名
+// 例如：39.136.124.74 cache.ott.ystenlive.itv.cmvideo.cn
+func loadIPTVHostMappings() map[string]string {
+	mappings := make(map[string]string)
+
+	path := filepath.Join("iptvhost")
+	file, err := os.Open(path)
+	if err != nil {
+		return mappings
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+
+		ip := fields[0]
+		host := strings.ToLower(strings.TrimSuffix(fields[1], "."))
+		if net.ParseIP(ip) == nil || host == "" {
+			continue
+		}
+
+		mappings[host] = ip
+	}
+
+	return mappings
+}
+
+// lookupMappedIP优先使用iptvhost中的固定IP。
+// 如果iptvhost没有对应域名，则回退到原来的hostMappings机制。
+func lookupMappedIP(host string) string {
+	host = strings.ToLower(strings.TrimSuffix(host, "."))
+
+	if ip, ok := ipTVHostMappings[host]; ok {
+		return ip
+	}
+
+	if mappedHost, ok := hostMappings[host]; ok {
+		return resolveIP(mappedHost)
+	}
+
+	return ""
 }
 
 func resolveIP(host string) string {
