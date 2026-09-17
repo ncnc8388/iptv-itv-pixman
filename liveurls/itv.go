@@ -16,14 +16,14 @@ type Itv struct {
 
 var (
 	hostMappings = map[string]string{
-		"cache.ott.ystenlive.itv.cmvideo.cn": "feiyangdigital.tg.ystenlive.ottdns.com",
-		"cache.ott.bestlive.itv.cmvideo.cn":  "feiyangdigital.tg.bestlive.ottdns.com",
-		"cache.ott.wasulive.itv.cmvideo.cn":  "feiyangdigital.tg.wasulive.ottdns.com",
-		"cache.ott.fifalive.itv.cmvideo.cn":  "feiyangdigital.tg.fifalive.ottdns.com",
-		"cache.ott.hnbblive.itv.cmvideo.cn":  "feiyangdigital.tg.hnbblive.ottdns.com",
+		"cache.ott.ystenlive.itv.cmvideo.cn": "ctcc-livod.ctyun-cdn.gitv.tv",
+		"cache.ott.bestlive.itv.cmvideo.cn":  "ctcc-livod.ctyun-cdn.gitv.tv",
+		"cache.ott.wasulive.itv.cmvideo.cn":  "ctcc-livod.ctyun-cdn.gitv.tv",
+		"cache.ott.fifalive.itv.cmvideo.cn":  "ctcc-livod.ctyun-cdn.gitv.tv",
+		"cache.ott.hnbblive.itv.cmvideo.cn":  "ctcc-livod.ctyun-cdn.gitv.tv",
 	}
 	programList = map[string]string{
-		"wasusyt/6000000001000029752.m3u8":     "http://gslbserv.itv.cmvideo.cn:80/6000000001000029752/1.m3u8?channel-id=wasusyt&Contentid=6000000001000029752&livemode=1&stbId=3",
+		"fifalive/6000000001000029752.m3u8":     "http://gslbserv.itv.cmvideo.cn:80/1.m3u8?channel-id=FifastbLive&Contentid=3000000010000017678&livemode=1&stbId=yu&mode=1",
 		"bestzb/5000000004000002226.m3u8":      "http://gslbserv.itv.cmvideo.cn:80/5000000004000002226/1.m3u8?channel-id=bestzb&Contentid=5000000004000002226&livemode=1&stbId=3",
 		"ystenlive/1000000005000265001.m3u8":   "http://gslbserv.itv.cmvideo.cn:80/1000000005000265001/1.m3u8?channel-id=ystenlive&Contentid=1000000005000265001&livemode=1&stbId=3",
 		"ystenlive/1000000001000023315.m3u8":   "http://gslbserv.itv.cmvideo.cn:80/1000000001000023315/1.m3u8?channel-id=ystenlive&Contentid=1000000001000023315&livemode=1&stbId=3",
